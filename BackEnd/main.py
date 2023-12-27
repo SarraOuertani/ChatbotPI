@@ -1,15 +1,15 @@
+# main.py
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-from textblob import TextBlob
+import openai  # Make sure to install the 'openai' library using pip
 
 import nltk
 from nltk.corpus import stopwords
-from nltk.stem import PorterStemmer, WordNetLemmatizer
+from nltk.stem import WordNetLemmatizer
 import string
-# nltk.download('punkt')
-
 
 app = FastAPI()
 
@@ -21,62 +21,46 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def analyze_texte(texte :str):
-    mot_cle=nltk.word_tokenize(texte)
-    return {"sujet":"vide","sentiments":[],"mot_cles":mot_cle}
+# Set your OpenAI API key
+openai.api_key = 'your_openai_api_key'
 
-def generer_reponse(texte: str):
-    return {"reponse":"reponse vide"}
+def analyze_text(text):
+    tokens = nltk.word_tokenize(text.lower())
+    tokens = [char for char in tokens if char not in string.punctuation]
+    stop_words = set(stopwords.words('english'))
+    tokens = [word for word in tokens if word not in stop_words]
+    
+    lemmatizer = WordNetLemmatizer()
+    lemmatized_words = [lemmatizer.lemmatize(word) for word in tokens]
 
-def formater_reponse(texte: str):
-    return {"reponse_formater":"reponse vide formater"}
-
-
+    return {"tokens": lemmatized_words, "response": "should be Tunisian recipe"}
 
 class AnalyseTexteInput(BaseModel):
     texte: str
 
-
-
 @app.post("/analyse")
 def analyse_endpoint(analyse_input: AnalyseTexteInput):
-    print(analyse_input)
-    #miniscule
-    texte=(analyse_input.texte).lower()
-    #ponctuation
-    texte = ' '.join([char for char in texte if char not in string.punctuation])
-    #texte.translate(str.maketrans("", "", string.punctuation))
-
-    #erreur:Faute d'orthographe
-    """blob = TextBlob(texte)
-    texte = blob.correct()
-    print(texte.words)
-    print(type(texte.words))"""
-
-    #tokenisation
-    tokens=nltk.word_tokenize(texte)
-    print(tokens)
-
-    #stopwords
-    stop_words = set(stopwords.words('english'))
-    tokens = [word for word in tokens if word not in stop_words]
-    print(tokens)
-
-
+    analyzed_data = analyze_text(analyse_input.texte)
     
-
-
+    # Call OpenAI GPT-3.5-turbo for generating a response
+    response_from_gpt = generate_response_with_openai(analyzed_data)
     
+    return {"analyzed_data": analyzed_data, "recette": response_from_gpt}
 
-    #Stemmer & Lemmatization
+def generate_response_with_openai(analyzed_data):
+    # Prepare a prompt for OpenAI GPT-3.5-turbo
+    prompt = f"You are a helpful assistant. {analyzed_data['response']}. User: {analyzed_data['tokens']}"
     
-    #porter = PorterStemmer()
-    lemmatizer = WordNetLemmatizer()
+    # Make a request to OpenAI API
+    response = openai.Completion.create(
+        engine="text-davinci-003",  # Use the appropriate GPT-3.5-turbo engine
+        prompt=prompt,
+        max_tokens=100,  # Adjust the max_tokens parameter as needed
+        temperature=0.7,  # Adjust the temperature parameter as needed
+        stop=None  # You can add stop words to limit the response length
+    )
     
-    #stemmed_words = [porter.stem(word) for word in tokens]
-    lemmatized_words = [lemmatizer.lemmatize(word) for word in tokens]
-    print(lemmatized_words)
+    return response.choices[0].text.strip()
 
-    return {"msg": analyse_input}
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
